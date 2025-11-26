@@ -1,0 +1,14 @@
+{
+  "name": "svt-quiz-backend",
+  "version": "1.0.0",
+  "description": "Dagligt nyhetsquiz baserat på SVT Nyheters RSS-flöden",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.0",
+    "rss-parser": "^3.13.0"
+  }
+}
