@@ -25,40 +25,103 @@ function shuffle(array) {
   return arr;
 }
 
-function buildQuiz(items, questionCount = 5) {
-  const questions = [];
-  const baseItems = [...items];
+// Hjälpfunktion för att blanda en array
+function shuffle(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
-  if (baseItems.length < 4) {
-    return [];
+// Kortar ner långa texter så de får plats i quizet
+function truncate(text, maxLen = 220) {
+  if (!text) return "";
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen).replace(/\s+\S*$/, "") + " …";
+}
+
+// Skapa quiz-frågor från RSS-poster
+function buildQuiz(items, questionCount = 7) {
+  // Använd bara artiklar som har både rubrik och någon form av ingress
+  const usable = (items || []).filter(
+    (it) => it && it.title && (it.contentSnippet || it.content)
+  );
+
+  if (usable.length < 4) {
+    return []; // för få nyheter för vettigt quiz
   }
 
+  const questions = [];
+  const baseItems = [...usable];
   const maxQuestions = Math.min(questionCount, baseItems.length - 3);
 
   for (let q = 0; q < maxQuestions; q++) {
     const correctIndex = Math.floor(Math.random() * baseItems.length);
     const correctItem = baseItems[correctIndex];
 
+    const correctSnippet = truncate(
+      correctItem.contentSnippet || correctItem.content || ""
+    );
+
     const otherItems = baseItems.filter((_, idx) => idx !== correctIndex);
-    const shuffledOthers = shuffle(otherItems).slice(0, 3);
+    const shuffledOthers = shuffle(otherItems);
 
-    const options = shuffle([
-      { text: correctItem.title, isCorrect: true },
-      ...shuffledOthers.map(item => ({
-        text: item.title,
-        isCorrect: false
-      }))
-    ]);
+    // Välj frågetyp: A = “sammanfattning → rubrik”, B = “rubrik → sammanfattning”
+    const useSummaryAsStem = Math.random() < 0.5;
 
-    const correctOptionIndex = options.findIndex(o => o.isCorrect);
+    let questionText;
+    let stemText;
+    let options = [];
+    let correctOptionIndex = 0;
+
+    if (useSummaryAsStem) {
+      // Typ A: visa sammanfattning, låt användaren välja rubriken
+      questionText = "Vilken rubrik stämmer med den här sammanfattningen?";
+      stemText = correctSnippet;
+
+      const wrongTitles = shuffledOthers
+        .filter((it) => it.title)
+        .slice(0, 3)
+        .map((it) => it.title);
+
+      const rawOptions = shuffle([
+        { text: correctItem.title, isCorrect: true },
+        ...wrongTitles.map((t) => ({ text: t, isCorrect: false })),
+      ]);
+
+      options = rawOptions.map((o) => o.text);
+      correctOptionIndex = rawOptions.findIndex((o) => o.isCorrect);
+    } else {
+      // Typ B: visa rubriken, låt användaren välja rätt sammanfattning
+      questionText = "Vilken sammanfattning hör till den här rubriken?";
+      stemText = correctItem.title;
+
+      const wrongSnippets = shuffledOthers
+        .map((it) => truncate(it.contentSnippet || it.content || ""))
+        .filter((txt) => txt && txt !== correctSnippet)
+        .slice(0, 3);
+
+      const rawOptions = shuffle([
+        { text: correctSnippet, isCorrect: true },
+        ...wrongSnippets.map((t) => ({ text: t, isCorrect: false })),
+      ]);
+
+      options = rawOptions.map((o) => o.text);
+      correctOptionIndex = rawOptions.findIndex((o) => o.isCorrect);
+    }
+
+    // Om vi inte fick ihop minst 2–3 alternativ, hoppa över den här frågan
+    if (options.length < 2) continue;
 
     questions.push({
       id: q + 1,
-      questionText: 'Vilken rubrik stämmer med den här sammanfattningen?',
-      summary: correctItem.contentSnippet || correctItem.content || '',
-      options: options.map(o => o.text),
+      questionText,
+      summary: stemText,      // frontend visar detta under frågetexten
+      options,
       correctIndex: correctOptionIndex,
-      link: correctItem.link
+      link: correctItem.link,
     });
   }
 
